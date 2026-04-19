@@ -1,5 +1,5 @@
 const { Octokit } = require("@octokit/rest");
-const { GoogleGenerativeAI , SchemaType} = require("@google/generative-ai");
+const { GoogleGenerativeAI, SchemaType } = require("@google/generative-ai");
 const axios = require("axios");
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
@@ -64,18 +64,33 @@ async function analyzePR(pr, repo) {
     };
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-3-flash-preview",
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: schema,
-        },
+      model: "gemini-3-flash-preview"
+      // generationConfig: {
+      //   responseMimeType: "application/json",
+      //   responseSchema: schema,
+      // },
     });
 
     console.log("Analyzing with Gemini...");
     const result = await model.generateContent(prompt);
 
-    const response = await result.response;
+    const response = await result.response.text();
     console.log("Response from Gemini", response);
+
+    if (response) {
+      try {
+        await octokit.rest.pulls.createReview({
+          owner: repo.owner.login,
+          repo: repo.name,
+          pull_number: pr.number ,
+          body: response, // The structured Markdown from the LLM
+          event: "COMMENT", // Options: APPROVE, REQUEST_CHANGES, COMMENT
+        });
+        console.log(" Feedback loop complete: Comment posted.");
+      } catch (error) {
+        console.error(`Error posting to GitHub: ${error.message}`);
+      }
+    }
 
     // return response.toString();
   } catch (error) {
